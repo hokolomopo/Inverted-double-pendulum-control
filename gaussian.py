@@ -18,26 +18,26 @@ import matplotlib.pyplot as plt
 SCALE = None
 STD = None
 
-# ENV_NAME = "InvertedDoublePendulumPyBulletEnv-v0"
-# DIMS = 9
-# SCALE = [ 0.00868285,  0.03400105, -0.00312787,  0.95092393, -0.01797627, -0.10439248, 0.86726532,  0.01176883,  0.12335652]
-# STD = [0.11101651, 0.58301397, 0.09502404, 0.07712284, 0.29911971, 1.78995357, 0.20914456, 0.45163139, 3.08248822]
+ENV_NAME = "InvertedDoublePendulumPyBulletEnv-v0"
+DIMS = 9
+SCALE = [ 0.00868285,  0.03400105, -0.00312787,  0.95092393, -0.01797627, -0.10439248, 0.86726532,  0.01176883,  0.12335652]
+STD = [0.11101651, 0.58301397, 0.09502404, 0.07712284, 0.29911971, 1.78995357, 0.20914456, 0.45163139, 3.08248822]
 
-ENV_NAME = "InvertedPendulumPyBulletEnv-v0"
-DIMS = 5
-SCALE = [-0.00207544, -0.00473823,  0.99553131,  0.00118865,  0.01364543]
-STD = [0.05083671, 0.24168294, 0.00498501, 0.09429286, 0.55792934]
+# ENV_NAME = "InvertedPendulumPyBulletEnv-v0"
+# DIMS = 5
+# SCALE = [-0.00207544, -0.00473823,  0.99553131,  0.00118865,  0.01364543]
+# STD = [0.05083671, 0.24168294, 0.00498501, 0.09429286, 0.55792934]
 
 # ENV_NAME = "CartPole-v0"
 # DIMS = 4
 
 SEED = 464684
 
-MAX_EPISODES = 500
-BATCH_SIZE = 64
+MAX_EPISODES = 10000
+BATCH_SIZE = 1
 MAX_TIMESTEPS = 200
 
-ALPHA = 0.01
+ALPHA = 0.001
 GAMMA = 0.99
 SIGMA = 1
 
@@ -68,7 +68,8 @@ class MLPPolicy(nn.Module):
         self.net = nn.Sequential(*self.layers)
 
     def forward(self, x):
-        return Normal(self.net((x.float() - self.scale) / self.normalize), SIGMA)
+        out = self.net((x.float() - self.scale) / self.normalize)
+        return Normal(out, SIGMA)
 
 
     def update_weight(self, log_probs, rewards, batch_size=1):
@@ -93,6 +94,10 @@ class MLPPolicy(nn.Module):
         loss.backward()
         optimizer.step()
 
+
+def train():
+    return
+
 if __name__ == "__main__":
     policy = MLPPolicy(DIMS, scale=SCALE, normalize=STD)
 
@@ -115,7 +120,8 @@ if __name__ == "__main__":
         for b in range(BATCH_SIZE):
 
             state = env.reset()
-            states.append([])
+            batch_states = []
+            states.append(batch_states)
             actions.append([])
             rewards.append([])
             log_probs.append([])
@@ -128,7 +134,7 @@ if __name__ == "__main__":
                 log_prob = policy(state_tensor).log_prob(action)
                 log_probs[b].append(log_prob)
 
-                states[b].append(state)
+                batch_states.append(state)
                 actions[b].append(action)
 
                 state, reward, done, _ = env.step([action.item()])
@@ -149,10 +155,8 @@ if __name__ == "__main__":
                     alive_time_batch.append(timesteps+1)
 
 
-        aa = []
-        for s in states:
-            aa.extend(s)
-        # print(np.std((np.array(aa) - SCALE) / STD, axis = 0))
+        SCALE = np.mean(np.array(batch_states), axis = 0)
+        STD = np.std(np.array(batch_states), axis = 0)
         policy.update_weight(log_probs, rewards, BATCH_SIZE)
 
         alive_time.append(np.mean(alive_time_batch))
