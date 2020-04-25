@@ -1,7 +1,3 @@
-""" Monte-Carlo Policy Gradient """
-
-from __future__ import print_function
-
 import gym
 import pybulletgym
 import numpy as np
@@ -13,184 +9,182 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.autograd as autograd
-
+from torch.distributions.normal import Normal
 from torch.autograd import Variable
+from torch import Tensor
+
 import matplotlib.pyplot as plt
+
+SCALE = None
+STD = None
+
+# ENV_NAME = "InvertedDoublePendulumPyBulletEnv-v0"
+# DIMS = 9
+# SCALE = [ 0.00868285,  0.03400105, -0.00312787,  0.95092393, -0.01797627, -0.10439248, 0.86726532,  0.01176883,  0.12335652]
+# STD = [0.11101651, 0.58301397, 0.09502404, 0.07712284, 0.29911971, 1.78995357, 0.20914456, 0.45163139, 3.08248822]
+
+ENV_NAME = "InvertedPendulumPyBulletEnv-v0"
+DIMS = 5
+SCALE = [-0.00207544, -0.00473823,  0.99553131,  0.00118865,  0.01364543]
+STD = [0.05083671, 0.24168294, 0.00498501, 0.09429286, 0.55792934]
+
+# ENV_NAME = "CartPole-v0"
+# DIMS = 4
 
 SEED = 464684
 
-MAX_EPISODES = 1500
+MAX_EPISODES = 500
+BATCH_SIZE = 64
 MAX_TIMESTEPS = 200
 
-ALPHA = 3e-5
+ALPHA = 0.01
 GAMMA = 0.99
-ACTION_STEP = 2
-SIGMA = 0.01
+SIGMA = 1
 
-# ENV_NAME = "InvertedDoublePendulumPyBulletEnv-v0"
-# ENV_NAME = "CartPole-v0"
-ENV_NAME = "InvertedPendulumPyBulletEnv-v0"
 
-class reinforce(nn.Module):
+class MLPPolicy(nn.Module):
+    def __init__(self, input_size=5, layers=(128,), scale=None, normalize=None):
+        super(MLPPolicy, self).__init__()
 
-    def __init__(self):
-        super(reinforce, self).__init__()
+        if scale is None:
+            self.scale = torch.zeros(1, input_size)
+        else:
+            self.scale = torch.tensor([scale])
 
-        # self.list_action = np.arange(-1, 1 + ACTION_STEP, ACTION_STEP)
-        # self.list_action = [0, 1]
-        self.list_action = np.array([-1, -0.5, 0, 0.5, 1])
-        # self.list_action = np.array([-1, 0, 1])
-        # self.list_action = np.array([-1, 1])
+        if normalize is None:
+            self.normalize = torch.ones(1, input_size)
+        else:
+            self.normalize = torch.tensor([normalize])
 
-        # policy network
-        self.fc1 = nn.Linear(5, 128)
-        self.relu = nn.ReLU(inplace=True)
-        self.tanh = nn.Tanh()
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, 1)
-        self.softmax = nn.Softmax()
+        self.layers = []
+        for n_neurons in layers:
+            self.layers.append(nn.Linear(input_size, n_neurons))
+            self.layers.append(nn.Tanh())
+
+            input_size = n_neurons
+
+        self.layers.append(nn.Linear(input_size, 1))
+
+        self.net = nn.Sequential(*self.layers)
 
     def forward(self, x):
-        x = self.fc1(x)
-        x = self.tanh(x)
-        x = self.fc2(x)
-        x = self.tanh(x)
-        x = self.fc3(x)
-        # x = self.softmax(x)
-        return x
+        return Normal(self.net((x.float() - self.scale) / self.normalize), SIGMA)
 
-    def get_action(self, state, epsilon=0.5, training=True):
 
-        # if training == True:
-        state = Variable(torch.Tensor(state))
-        state = torch.unsqueeze(state, 0)
-        params = self.forward(state)
-        mu = params[0][0].item()
+    def update_weight(self, log_probs, rewards, batch_size=1):
+        optimizer.zero_grad()
 
-        action = np.random.normal(mu, SIGMA**2)
-        # if training == False:
-        #     action = torch.argmax(probs)
+        losses = []
+        for i in range(batch_size):
+            R = 0
+            batch_losses = []
+            returns = []
+            for r in rewards[i][::-1]:
+                R = r + GAMMA * R
+                returns.insert(0, R)
+            returns = torch.tensor(returns)
+            returns = returns - returns.mean()
+            for log_prob, R in zip(log_probs[i], returns):
+                batch_losses.append(-log_prob * R)
+            loss = torch.cat(batch_losses).sum() / batch_size
+            losses.append(loss)
 
-        # action = action.data
-        # action = action[0]
-        
-        return action
-        # else:
-        #     state = Variable(torch.Tensor(state))
-        #     state = torch.unsqueeze(state, 0)
-        #     probs = self.forward(state)
-        #     mu = probs.item()
-        #     return mu
+        loss = torch.sum(torch.stack(losses))    
+        loss.backward()
+        optimizer.step()
 
-    def pi(self, s, a):
-        # s = Variable(torch.Tensor([s]))
-        # probs = self.forward(s)
-        # probs = torch.squeeze(probs, 0)
-        # p = probs[np.where(self.list_action == a)]
-        s = Variable(torch.Tensor([s]))
-        params = self.forward(s)
-        mu = params[0]
-        # SIGMA = params[0][1]
-
-        p = 1 / (math.sqrt(2*math.pi) * SIGMA)
-        p *= torch.exp(-(a - mu)**2 / (2 * SIGMA**2))
-
-        return p
-
-    def update_weight(self, states, actions, rewards, optimizer):
-        G = Variable(torch.Tensor([0]))
-        # for each step of the episode t = T - 1, ..., 0
-        # r_tt represents r_{t+1}
-        for s_t, a_t, r_tt in zip(states[::-1], actions[::-1], rewards[::-1]):
-            G = Variable(torch.Tensor([r_tt])) + GAMMA * G
-            loss = (-1.0) * G * torch.log(self.pi(s_t, a_t))
-            # update policy parameter \theta
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-def main():
+if __name__ == "__main__":
+    policy = MLPPolicy(DIMS, scale=SCALE, normalize=STD)
 
     env = gym.make(ENV_NAME)
     env.seed(seed=SEED)
 
-    agent = reinforce()
-    # agent.cuda()
-    # torch.set_default_tensor_type('torch.cuda.FloatTensor')
-    optimizer = optim.Adam(agent.parameters(), lr=ALPHA)
+    optimizer = optim.Adam(policy.parameters(), lr=ALPHA)
 
-    episodes = []
     alive_time = []
 
     for i_episode in range(MAX_EPISODES):
 
-        state = env.reset()
 
         states = []
         actions = []
-        rewards = [0]   # no reward at t = 0
+        rewards = []
+        log_probs = []
+        alive_time_batch = []
 
-        for timesteps in range(MAX_TIMESTEPS):
+        for b in range(BATCH_SIZE):
 
-            if(i_episode != 0):
-                epsilon = 1/math.sqrt(i_episode)
-            action = agent.get_action(state, epsilon=0)
+            state = env.reset()
+            states.append([])
+            actions.append([])
+            rewards.append([])
+            log_probs.append([])
 
-            states.append(state)
-            actions.append(action)
+            for timesteps in range(MAX_TIMESTEPS):
+                state_tensor = Tensor(state)
 
-            state, reward, done, _ = env.step([action])
-            # state, reward, done, _ = env.step(action)
+                # with torch.no_grad():
+                action = policy(state_tensor).sample()
+                log_prob = policy(state_tensor).log_prob(action)
+                log_probs[b].append(log_prob)
 
-            rewards.append(reward)
+                states[b].append(state)
+                actions[b].append(action)
 
-            if done:
-                # alive_time.append(timesteps+1)
-                if i_episode > 3:
-                    alive_time.append(np.mean([timesteps+1, alive_time[-1], alive_time[-2]]))
-                else:
-                    alive_time.append(timesteps+1)
-                episodes.append(i_episode)
-                print("Episode {} finished after {} timesteps".format(i_episode, timesteps+1))
-                break
+                state, reward, done, _ = env.step([action.item()])
+                # state, reward, done, _ = env.step(action.item())
 
-        agent.update_weight(states, actions, rewards, optimizer)
+                # if reward > 0:
+                #     reward = 1
 
-    env.close()
+                if done:
 
-    # env = gym.make(ENV_NAME)
-    # state = env.reset()
-    # env.render(mode="human") 
+                    alive_time_batch.append(timesteps+1)
+                    rewards[b].append(0)
+                    break
 
-    env = gym.make(ENV_NAME)
-    # env.render(mode="human")
-    duration = []
+                rewards[b].append(reward)
 
-    for _ in range(50):
-        # print("###############################################")
-        # print("Reset Env")
-        # print("###############################################")
-        state = env.reset()
+                if timesteps == MAX_TIMESTEPS-1:
+                    alive_time_batch.append(timesteps+1)
 
-        for i in range(MAX_TIMESTEPS+1):
-            action = agent.get_action(state, training=False)
-            state, reward, done, _ = env.step([action])
-            # print(action, state, i)
-            # time.sleep(0.05)
 
-            if done or i == MAX_TIMESTEPS:
-                print("Lasted {} timesteps".format(i))
-                duration.append(i)
-                # print("\n\n\n")
-                break
+        aa = []
+        for s in states:
+            aa.extend(s)
+        # print(np.std((np.array(aa) - SCALE) / STD, axis = 0))
+        policy.update_weight(log_probs, rewards, BATCH_SIZE)
+
+        alive_time.append(np.mean(alive_time_batch))
+        print("Episode {}  finished after a mean of {:.1f} timesteps and a std of {:.2f}".format(
+            i_episode, np.mean(alive_time_batch), np.std(alive_time_batch)))
 
     env.close()
-    print("Mean : {}".format(np.mean(duration)))
 
     plt.plot(alive_time)
+    plt.xlabel("Number of batches")
+    plt.ylabel("Iteration staying alive")
     plt.show()
 
 
-if __name__ == "__main__":
-    random.seed(SEED)
-    main()
+###############################################
+# One backward per traj                       #
+###############################################
+
+    # def update_weight(self, log_probs, rewards, batch_size=1):
+    #     optimizer.zero_grad()
+
+    #     for i in range(batch_size):
+    #         R = 0
+    #         policy_loss = []
+    #         returns = []
+    #         for r in rewards[i][::-1]:
+    #             R = r + GAMMA * R
+    #             returns.insert(0, R)
+    #         returns = torch.tensor(returns)
+    #         returns = (returns - returns.mean()) / (returns.std())
+    #         for log_prob, R in zip(log_probs[i], returns):
+    #             policy_loss.append(-log_prob * R)
+    #         policy_loss = torch.cat(policy_loss).sum() / batch_size
+    #         policy_loss.backward()
+    #     optimizer.step()

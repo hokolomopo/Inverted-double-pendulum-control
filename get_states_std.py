@@ -6,8 +6,8 @@ import math
 
 import matplotlib.pyplot as plt
 
-# ENV_NAME = "InvertedDoublePendulumPyBulletEnv-v0"
-ENV_NAME = "InvertedPendulumPyBulletEnv-v0"
+ENV_NAME = "InvertedDoublePendulumPyBulletEnv-v0"
+# ENV_NAME = "InvertedPendulumPyBulletEnv-v0"
 
 MAX_EPISODES = 500
 MAX_TIMESTEPS = 200
