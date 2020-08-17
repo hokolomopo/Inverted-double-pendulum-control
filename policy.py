@@ -42,4 +42,3 @@ class OptimalPolicyDiscrete(Policy):
         max_index = np.argmax(predicted)
 
         return self.possible_actions[max_index]
-    

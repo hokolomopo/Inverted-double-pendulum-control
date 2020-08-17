@@ -10,7 +10,7 @@ ENV_NAME = "InvertedDoublePendulumPyBulletEnv-v0"
 # ENV_NAME = "InvertedPendulumPyBulletEnv-v0"
 
 MAX_EPISODES = 500
-MAX_TIMESTEPS = 200
+MAX_TIMESTEPS = 10000
 
 if __name__=="__main__":
     env = gym.make(ENV_NAME)
@@ -37,5 +37,7 @@ if __name__=="__main__":
 
     print(np.mean(states, axis=0))
     print(np.std(states, axis=0))
+    print("Max : {}".format(np.max(states, axis=0)))
+    print("Min : {}".format(np.min(states, axis=0)))
 
 

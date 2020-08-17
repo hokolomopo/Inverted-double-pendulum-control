@@ -25,9 +25,9 @@ ALPHA = 3e-5
 GAMMA = 0.99
 ACTION_STEP = 0.1
 
-ENV_NAME = "InvertedDoublePendulumPyBulletEnv-v0"
+# ENV_NAME = "InvertedDoublePendulumPyBulletEnv-v0"
 # ENV_NAME = "CartPole-v0"
-# ENV_NAME = "InvertedPendulumPyBulletEnv-v0"
+ENV_NAME = "InvertedPendulumPyBulletEnv-v0"
 
 class reinforce(nn.Module):
 
@@ -41,7 +41,7 @@ class reinforce(nn.Module):
         # self.list_action = np.array([-1, 1])
 
         # policy network
-        self.fc1 = nn.Linear(9, 128)
+        self.fc1 = nn.Linear(5, 128)
         self.relu = nn.ReLU(inplace=True)
         self.tanh = nn.Tanh()
         self.fc2 = nn.Linear(128, 128)

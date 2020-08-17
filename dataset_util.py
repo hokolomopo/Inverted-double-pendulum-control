@@ -5,8 +5,8 @@ import math
 from agent import Agent
 from policy import RandomPolicy
 
-def get_dataset(n_trajectories=100, len_trajectories=1000, policy=RandomPolicy(), list_of_traj=False, verbose=True):
-    """ Generate a dataset ."""
+def get_dataset(n_trajectories=100, len_trajectories=1000, policy=RandomPolicy(), list_of_traj=False, verbose=True, env=None):
+    """ Generate a dataset for FQI."""
 
     X = []
     X_next = []
@@ -24,7 +24,7 @@ def get_dataset(n_trajectories=100, len_trajectories=1000, policy=RandomPolicy()
             print("Dataset generated at {}%, elapsed time {:.0f}s, remaining time {:.0f}s".format(int(j/n_trajectories * 100), elapsed_time, remaining_time))
 
 
-        traj, rewards, next = Agent.generate_trajectory(len_trajectories, policy=RandomPolicy(), stop_at_terminal=False)
+        traj, rewards, next = Agent.generate_trajectory(len_trajectories, policy=RandomPolicy(), stop_at_terminal=False, env=env)
 
         if list_of_traj:
             X.append(traj)

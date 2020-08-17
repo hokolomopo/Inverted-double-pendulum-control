@@ -52,14 +52,15 @@ class Agent:
         self.done = done
         self.state = next_state
 
-    def get_possible_actions(self, step=0.2):
+        return [next_state, rewards, done]
+
+    def get_possible_actions(self, step=1):
         return np.arange(-1, 1 + step, step)
 
     @staticmethod
-    def generate_trajectory(iterations, policy=RandomPolicy(), stop_at_terminal=True):
+    def generate_trajectory(iterations, policy=RandomPolicy(), stop_at_terminal=True, env=None):
         """Generate a trajectory following the policy of the agent"""
 
-        env = gym.make('InvertedDoublePendulumPyBulletEnv-v0')
 
         init_state = env.reset()  # should return a state vector if everything worked
 
